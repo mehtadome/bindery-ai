@@ -4,12 +4,11 @@ import { useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Home, RotateCcw } from "lucide-react";
 import type {
-  WorkflowStep, AccountData, AcordFormType,
-  ExtractionLogEntry, FormExtractionResult,
+  WorkflowStep, AccountData, AcordFormType, ExtractionLogEntry, FormExtractionResult,
 } from "@/app/types";
 import { ACORD_FORMS } from "@/app/lib/constants";
 import { parseCSV } from "@/app/lib/csv-parser";
-import { getFieldsForForm } from "@/app/lib/acord-fields";
+import { parseExtractionResponse } from "@/app/lib/extract";
 import StepIndicator from "./StepIndicator";
 import UploadPanel from "./UploadPanel";
 import AccountPicker from "./AccountPicker";
@@ -104,16 +103,8 @@ export default function PortalShell() {
         if (chunk.includes("ACORD 130")) addLog("success", "Extracting ACORD 130 fields...");
       }
 
-      // buffer is complete — parse JSON and build FormExtractionResult[]
-      // Phase 2 will replace this placeholder with real JSON parsing
-      const placeholderResults: FormExtractionResult[] = selectedForms.map((formType) => ({
-        formType,
-        fields: [],
-        fillRate: 0,
-        totalFields: getFieldsForForm(formType).length,
-        filledFields: 0,
-        flaggedFields: 0,
-      }));
+      // buffer is complete — parse Claude's JSON response into FormExtractionResult[]
+      const placeholderResults = parseExtractionResponse(fullText, selectedForms);
 
       addLog("success", `Extraction complete — review your results below`);
       setResults(placeholderResults);
