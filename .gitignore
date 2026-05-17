@@ -1,0 +1,7 @@
+private/
+.claude/
+ACORD Form 125_files/
+.venv/
+__pycache__/
+*.pyc
+.env
