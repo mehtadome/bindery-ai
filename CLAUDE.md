@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Working With This User
+
+- If the terminal rendering is corrupted/unreadable, write fix instructions to `~/Desktop/temp.txt` instead of terminal output.
+
 ## Project Context
 
 Take-home MVP for a Cooper AI Sales Engineer interview. **Bindery AI** automates extraction of commercial insurance AMS CSV exports into filled ACORD forms (125, 126, 130) using Claude Haiku.

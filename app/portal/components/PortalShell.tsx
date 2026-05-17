@@ -7,7 +7,7 @@ import type {
   WorkflowStep, AccountData, AcordFormType, ExtractionLogEntry, FormExtractionResult,
 } from "@/app/types";
 import { ACORD_FORMS } from "@/app/lib/constants";
-import { parseCSV } from "@/app/lib/csv-parser";
+import { parseCSV, resolveAccounts } from "@/app/lib/csv-parser";
 import { parseExtractionResponse } from "@/app/lib/extract";
 import StepIndicator from "./StepIndicator";
 import UploadPanel from "./UploadPanel";
@@ -47,12 +47,14 @@ export default function PortalShell() {
     setExtractionLog((prev) => [...prev, { timestamp: new Date(), type, message }]);
   }, []);
 
-  // parse CSV on upload, advance to account selection
+  // parse CSV on upload, advance to account selection, then async-resolve any pending accounts
   async function handleFileAccepted(file: File) {
     const text = await file.text();
     const parsed = parseCSV(text);
     setAccounts(parsed);
     setStep("select-account");
+    // fire resolution in background — onUpdate spreads state so pending cards re-render as they resolve
+    resolveAccounts(parsed, () => setAccounts([...parsed]));
   }
 
   function handleFormToggle(form: AcordFormType) {
