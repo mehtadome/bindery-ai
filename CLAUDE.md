@@ -4,53 +4,67 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Context
 
-Take-home MVP for a Cooper AI Sales Engineer interview. The goal: build a CLI tool that ingests brokerage account artifacts (AMS CSV exports, PDF dec pages) and outputs filled ACORD insurance forms (ACORD 125, 126, etc.).
+Take-home MVP for a Cooper AI Sales Engineer interview. **Bindery AI** automates extraction of commercial insurance AMS CSV exports into filled ACORD forms (125, 126, 130) using Claude Haiku.
 
-This is a Python project. No code exists yet — see `cooper_ai_se_prep.md` for the full plan and `Sales Engineer - Take Home Assignment.pdf` for the assignment.
+Two workstreams in the same repo:
+- **Web app** (Next.js 16, App Router) — lives at the repo root (`app/`, `package.json`, etc.)
+- **Python CLI** (planned, T1) — `fill_form.py`, `ingestion.py`, etc. will live at root alongside the web app
 
 ## Commands
 
 ```bash
-# Install dependencies (once venv is set up)
-pip install pdfplumber pandas anthropic pypdf PyYAML
+# Web app
+npm run dev          # start dev server on localhost:3000
+npm run build        # production build
+npm run lint         # ESLint
 
-# Run the CLI
-python fill_form.py \
-  --inputs dec_page.pdf ams_export.csv \
-  --form acord125 \
-  --output filled_acord125.pdf
+# Python CLI (T1 — not yet implemented)
+pip install pdfplumber pandas anthropic pypdf PyYAML
+python fill_form.py --inputs dec_page.pdf ams_export.csv --form acord125 --output filled_acord125.pdf
 ```
 
-Set `ANTHROPIC_API_KEY` in the environment before running.
+Set `ANTHROPIC_API_KEY` in `.env.local` before running the web app.
 
-## Architecture
+## Web App Architecture
 
-Four-layer pipeline with a clean separation between intelligence and configuration:
+```
+app/
+  api/extract/route.ts     # POST — streamText via Claude Haiku
+  portal/                  # 3-step flow: upload → run → results
+    components/
+      PortalShell.tsx      # step state machine (upload/run/results)
+      UploadPanel.tsx      # drag-drop CSV zone
+      RunPanel.tsx         # account picker, form checkboxes, streaming log
+      ResultsPanel.tsx     # 3-tab view (ACORD 125 / 126 / 130)
+      StepIndicator.tsx    # breadcrumb
+  architecture/            # static diagram page
+  components/              # Navbar, HeroSection, PipelineCard, FeaturesSection
+  lib/constants.ts         # ACORD form labels, pipeline steps, hero stats
+  types.ts                 # AcordFormType, Step, CsvRow, ExtractionRun
+  globals.css              # Tailwind v4 @theme inline, Bindery color tokens
+```
 
+**Theme tokens** (Tailwind v4, `globals.css`):
+- `text-brown` / `bg-brown` → `#6b4226` (headings)
+- `bg-red` / `text-red` → `#cc2200` (CTAs, active state)
+- `text-muted` → `#6b7280`
+- `border-border` → `#e5e7eb`
+
+**AI SDK**: Vercel AI SDK v6 — use `maxOutputTokens` (not `maxTokens`), `toTextStreamResponse()` (not `toDataStreamResponse()`). Model: `claude-haiku-4-5-20251001`.
+
+## Python CLI Architecture (T1)
+
+Four-layer pipeline:
 ```
 Inputs (PDF/CSV) → Ingestion → Extraction (Claude) → Mapping (YAML) → Form Fill → Output PDF
 ```
 
-**Ingestion Layer** (`ingestion.py`): `pdfplumber` for native PDFs, `pandas` for CSVs. Flags image-only PDFs as unsupported (no OCR in scope).
-
-**Extraction Layer** (`extraction.py`): Single Claude API call with all ingested text. Returns a canonical Account Schema JSON (see `cooper_ai_se_prep.md` for the full schema). This is the only place AI logic lives.
-
-**Mapping Layer** (`mappings/acord125.yaml`, etc.): YAML config files, one per form type, that map canonical schema keys → PDF field names. Adding a new form = writing a new YAML; no extraction logic changes.
-
-**Form Fill Layer** (`form_fill.py`): `pypdf` writes to fillable PDF form fields. Unfilled fields are flagged to console with a fill-rate report (e.g., `38/42 fields filled, 4 flagged for review`).
-
-**Entry point** (`fill_form.py`): `argparse` CLI that wires all four layers together.
-
-## Key Design Decisions
-
-- **Extraction is decoupled from mapping.** The canonical Account Schema is the contract between them. Never add form-specific logic into the extraction prompt.
-- **Sensitive fields must be flagged, not silently filled.** Coverage limits, effective dates, and FEIN should surface in the console report when extracted from an ambiguous source.
-- **No AMS write-back, no web UI, no multi-form routing in MVP.** Deliberate scope cuts — document them explicitly when presenting.
-- **`pypdf` over `pdftk`** because pdftk requires a binary install; pypdf is pure Python and works in a clean venv.
+- **Ingestion** (`ingestion.py`): pdfplumber for PDFs, pandas for CSVs
+- **Extraction** (`extraction.py`): single Claude call → canonical Account Schema JSON
+- **Mapping** (`mappings/acord125.yaml`, etc.): schema keys → ACORD PDF field names; adding a form = new YAML only
+- **Form Fill** (`form_fill.py`): pypdf writes field values; console fill-rate report
 
 ## Canonical Account Schema
-
-The extraction layer outputs this structure; the mapping layer reads from it:
 
 ```json
 {
@@ -67,22 +81,8 @@ The extraction layer outputs this structure; the mapping layer reads from it:
 }
 ```
 
-## Mapping Config Format
+## Key Design Decisions
 
-```yaml
-form: ACORD 125
-pdf_template: templates/acord125_blank.pdf
-field_map:
-  named_insured: "NamedInsured1"
-  fein: "FEIN"
-  address.street: "MailingAddress"
-  address.city: "City"
-  address.state: "State"
-  address.zip: "ZIP"
-  effective_date: "PolicyEffDate"
-  expiration_date: "PolicyExpDate"
-  business_description: "DescriptionOfOperations"
-  naics: "NAICSCode"
-```
-
-Dot notation (e.g., `address.city`) resolves nested schema keys.
+- **Extraction decoupled from mapping.** Canonical schema is the contract. No form-specific logic in the extraction prompt.
+- **Sensitive fields flagged, not silently filled.** Coverage limits, effective dates, FEIN surface in the fill-rate report when ambiguous.
+- `pypdf` over `pdftk` — pure Python, no binary install required.

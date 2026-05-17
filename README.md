@@ -56,3 +56,16 @@ python fill_form.py \
 | Form fill | pypdf |
 | Mapping config | PyYAML |
 | CLI | argparse |
+
+## Web UI
+
+A Next.js front-end lives at the repo root alongside the Python pipeline.
+
+```bash
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) to use the UI. The page auto-updates as you edit `app/page.tsx`.
+
+To deploy, use the [Vercel Platform](https://vercel.com/new) — see [Next.js deployment docs](https://nextjs.org/docs/app/building-your-application/deploying) for details.
