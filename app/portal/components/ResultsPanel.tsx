@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
+import { Download, CheckCircle2, AlertTriangle, XCircle, Pencil } from "lucide-react";
 import type { AcordFormType, FormExtractionResult } from "@/app/types";
 import { ACORD_FORM_LABELS } from "@/app/lib/constants";
 import { getFieldsForForm } from "@/app/lib/acord-fields";
@@ -27,7 +27,7 @@ function FieldRow({ fieldName, value, flagged }: FieldRowProps) {
   const isEmpty = !value;
 
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
+    <div className="group flex items-center gap-3 py-2.5 border-b border-border last:border-0">
       {/* status icon */}
       {flagged  ? <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" /> :
        isEmpty  ? <XCircle className="w-3.5 h-3.5 text-red/50 shrink-0" />        :
@@ -42,6 +42,11 @@ function FieldRow({ fieldName, value, flagged }: FieldRowProps) {
       }`}>
         {flagged ? `[FLAGGED] ${value}` : isEmpty ? "—" : value}
       </span>
+
+      {/* edit icon — inline editing not yet implemented */}
+      <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-border shrink-0" tabIndex={-1}>
+        <Pencil className="w-3 h-3 text-muted" />
+      </button>
     </div>
   );
 }
