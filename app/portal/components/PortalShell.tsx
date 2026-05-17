@@ -1,42 +1,163 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import type { Step, CsvRow } from "@/app/types";
+import { ArrowLeft, ArrowRight, Home, RotateCcw } from "lucide-react";
+import type {
+  WorkflowStep, AccountData, AcordFormType,
+  ExtractionLogEntry, FormExtractionResult,
+} from "@/app/types";
+import { ACORD_FORMS } from "@/app/lib/constants";
+import { parseCSV } from "@/app/lib/csv-parser";
+import { getFieldsForForm } from "@/app/lib/acord-fields";
 import StepIndicator from "./StepIndicator";
 import UploadPanel from "./UploadPanel";
-import RunPanel from "./RunPanel";
+import AccountPicker from "./AccountPicker";
+import FormSelector from "./FormSelector";
+import ExtractionLog from "./ExtractionLog";
 import ResultsPanel from "./ResultsPanel";
 
+const STEP_ORDER: WorkflowStep[] = [
+  "upload", "select-account", "select-forms", "extracting", "results",
+];
+
 const slide = {
-  initial: { opacity: 0, x: 16 },
-  animate: { opacity: 1, x: 0 },
-  exit:    { opacity: 0, x: -16 },
+  initial:    { opacity: 0, x: 16 },
+  animate:    { opacity: 1, x: 0  },
+  exit:       { opacity: 0, x: -16 },
   transition: { duration: 0.25, ease: "easeOut" as const },
 };
 
 export default function PortalShell() {
-  const [step, setStep] = useState<Step>("upload");
-  const [file, setFile] = useState<File | null>(null);
-  const [output, setOutput] = useState("");
+  // active panel — drives AnimatePresence + StepIndicator; advanced in handleFileAccepted, handleBack, runExtraction
+  const [step, setStep] = useState<WorkflowStep>("upload");
+  // parsed from uploaded CSV in handleFileAccepted via parseCSV (csv-parser.ts)
+  const [accounts, setAccounts] = useState<AccountData[]>([]);
+  // set by AccountPicker.onSelect; passed to /api/extract as the extraction subject
+  const [selectedAccount, setSelectedAccount] = useState<AccountData | null>(null);
+  // toggled in FormSelector; passed to /api/extract; defaults to all three forms
+  const [selectedForms, setSelectedForms] = useState<AcordFormType[]>([...ACORD_FORMS]);
+  // built entry-by-entry in runExtraction as stream chunks arrive; rendered by ExtractionLog
+  const [extractionLog, setExtractionLog] = useState<ExtractionLogEntry[]>([]);
+  // true while stream is open; drives ExtractionLog spinner and disables navigation
+  const [isExtracting, setIsExtracting] = useState(false);
+  // populated after stream completes; Phase 2 replaces placeholder with real JSON parse
+  const [results, setResults] = useState<FormExtractionResult[]>([]);
 
-  function handleFileAccepted(f: File) {
-    setFile(f);
-    setStep("run");
+  const addLog = useCallback((type: ExtractionLogEntry["type"], message: string) => {
+    setExtractionLog((prev) => [...prev, { timestamp: new Date(), type, message }]);
+  }, []);
+
+  // parse CSV on upload, advance to account selection
+  async function handleFileAccepted(file: File) {
+    const text = await file.text();
+    const parsed = parseCSV(text);
+    setAccounts(parsed);
+    setStep("select-account");
   }
 
-  function handleRunComplete(rawOutput: string, _row: CsvRow) {
-    setOutput(rawOutput);
-    setStep("results");
+  function handleFormToggle(form: AcordFormType) {
+    setSelectedForms((prev) =>
+      prev.includes(form) ? prev.filter((f) => f !== form) : [...prev, form]
+    );
   }
+
+  async function runExtraction() {
+    if (!selectedAccount || selectedForms.length === 0) return;
+
+    setStep("extracting");
+    setIsExtracting(true);
+    setExtractionLog([]);
+    setResults([]);
+
+    addLog("info", `Starting extraction for ${selectedAccount.insuredName}`);
+    addLog("info", `Forms selected: ${selectedForms.join(", ")}`);
+
+    try {
+      const res = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account: selectedAccount, formTypes: selectedForms }),
+      });
+
+      if (!res.ok || !res.body) {
+        addLog("error", "API request failed — check your API key and try again.");
+        setIsExtracting(false);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+
+      addLog("info", "Claude is analyzing your AMS data...");
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        fullText += chunk;
+
+        // surface form progress as stream arrives
+        if (chunk.includes("ACORD 125")) addLog("success", "Extracting ACORD 125 fields...");
+        if (chunk.includes("ACORD 126")) addLog("success", "Extracting ACORD 126 fields...");
+        if (chunk.includes("ACORD 130")) addLog("success", "Extracting ACORD 130 fields...");
+      }
+
+      // buffer is complete — parse JSON and build FormExtractionResult[]
+      // Phase 2 will replace this placeholder with real JSON parsing
+      const placeholderResults: FormExtractionResult[] = selectedForms.map((formType) => ({
+        formType,
+        fields: [],
+        fillRate: 0,
+        totalFields: getFieldsForForm(formType).length,
+        filledFields: 0,
+        flaggedFields: 0,
+      }));
+
+      addLog("success", `Extraction complete — review your results below`);
+      setResults(placeholderResults);
+      setIsExtracting(false);
+      setTimeout(() => setStep("results"), 1200);
+
+    } catch {
+      addLog("error", "Network request failed.");
+      setIsExtracting(false);
+    }
+  }
+
+  function handleBack() {
+    const idx = STEP_ORDER.indexOf(step);
+    if (idx > 0) setStep(STEP_ORDER[idx - 1]);
+  }
+
+  function handleReset() {
+    setStep("upload");
+    setAccounts([]);
+    setSelectedAccount(null);
+    setSelectedForms([...ACORD_FORMS]);
+    setExtractionLog([]);
+    setResults([]);
+    setIsExtracting(false);
+  }
+
+  const canGoBack = step !== "upload" && step !== "extracting";
+  const canGoNext =
+    (step === "select-account" && selectedAccount !== null) ||
+    (step === "select-forms"   && selectedForms.length > 0);
+  const isLastStep = step === "results";
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
 
       {/* Top bar */}
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-border px-6 py-3 flex items-center justify-between">
-        <a href="/" className="text-xs font-semibold text-muted hover:text-foreground transition-colors">
-          ← Home
+        <a
+          href="/"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-foreground transition-colors"
+        >
+          <Home className="w-3.5 h-3.5" />
+          Home
         </a>
         <div className="flex items-center gap-1.5">
           <span className="text-sm font-black text-foreground tracking-tight">Bindery</span>
@@ -44,31 +165,23 @@ export default function PortalShell() {
           <span className="text-muted mx-1">·</span>
           <span className="text-sm font-semibold text-muted">Portal</span>
         </div>
-        <div className="w-16" />
+        {isLastStep ? (
+          <button
+            onClick={handleReset}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-foreground transition-colors"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Start Over
+          </button>
+        ) : (
+          <div className="w-16" />
+        )}
       </div>
 
       {/* Step indicator */}
-      <div className="border-b border-border px-6 py-4 flex items-center justify-center">
-        <StepIndicator current={step} />
+      <div className="border-b border-border px-6 py-5 flex items-center justify-center">
+        <StepIndicator currentStep={step} />
       </div>
-
-      {/* File name pill */}
-      {file && step !== "upload" && (
-        <div className="px-6 pt-4 flex justify-center">
-          <span className="inline-flex items-center gap-2 bg-brown/10 text-brown text-xs font-semibold px-3 py-1.5 rounded-full">
-            📄 {file.name}
-            {step === "results" && (
-              <button
-                onClick={() => { setFile(null); setOutput(""); setStep("upload"); }}
-                className="ml-1 text-brown/60 hover:text-brown transition-colors"
-                aria-label="Upload new file"
-              >
-                ✕
-              </button>
-            )}
-          </span>
-        </div>
-      )}
 
       {/* Main content */}
       <main className="flex-1 px-6">
@@ -79,37 +192,65 @@ export default function PortalShell() {
             </motion.div>
           )}
 
-          {step === "run" && file && (
-            <motion.div key="run" {...slide}>
-              <RunPanel file={file} onRunComplete={handleRunComplete} />
-              {output && (
-                <div className="max-w-2xl mx-auto pb-8">
-                  <button
-                    onClick={() => setStep("results")}
-                    className="inline-flex items-center gap-2 bg-red text-white font-semibold px-6 py-3 rounded-full hover:bg-red-dark transition-colors text-sm"
-                  >
-                    View Results →
-                  </button>
-                </div>
-              )}
+          {step === "select-account" && (
+            <motion.div key="select-account" {...slide}>
+              <AccountPicker
+                accounts={accounts}
+                selectedAccount={selectedAccount}
+                onSelect={setSelectedAccount}
+              />
+            </motion.div>
+          )}
+
+          {step === "select-forms" && (
+            <motion.div key="select-forms" {...slide}>
+              <FormSelector selectedForms={selectedForms} onToggle={handleFormToggle} />
+            </motion.div>
+          )}
+
+          {step === "extracting" && (
+            <motion.div key="extracting" {...slide}>
+              <ExtractionLog entries={extractionLog} isExtracting={isExtracting} />
             </motion.div>
           )}
 
           {step === "results" && (
             <motion.div key="results" {...slide}>
-              <ResultsPanel output={output} />
-              <div className="max-w-2xl mx-auto pb-8 flex gap-3">
-                <button
-                  onClick={() => setStep("run")}
-                  className="text-sm font-semibold text-muted hover:text-foreground transition-colors"
-                >
-                  ← Back to Run
-                </button>
-              </div>
+              <ResultsPanel results={results} />
             </motion.div>
           )}
         </AnimatePresence>
       </main>
+
+      {/* Back / Continue navigation */}
+      {(canGoBack || canGoNext) && (
+        <div className="sticky bottom-0 w-full bg-white/80 backdrop-blur-md border-t border-border">
+          <div className="max-w-2xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div>
+            {canGoBack && (
+              <button
+                onClick={handleBack}
+                className="inline-flex items-center gap-2 text-sm font-semibold text-muted hover:text-foreground transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back
+              </button>
+            )}
+          </div>
+          <div>
+            {canGoNext && (
+              <button
+                onClick={step === "select-forms" ? runExtraction : () => setStep(STEP_ORDER[STEP_ORDER.indexOf(step) + 1])}
+                className="inline-flex items-center gap-2 bg-red text-white font-semibold px-6 py-2.5 rounded-full text-sm hover:bg-red-dark transition-colors"
+              >
+                {step === "select-forms" ? "Start Extraction" : "Continue"}
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
