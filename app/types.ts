@@ -25,6 +25,7 @@ export interface AccountData {
   deductible?: string;
   coverageDetails?: string;
   rawData: Record<string, string>;
+  status?: "pending" | "resolved" | "failed";
 }
 
 export interface ExtractionLogEntry {
