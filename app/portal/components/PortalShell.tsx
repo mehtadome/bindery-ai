@@ -141,7 +141,8 @@ export default function PortalShell() {
     setIsExtracting(false);
   }
 
-  const canGoBack = step !== "upload" && step !== "extracting";
+  // allow back on extracting step only after stream ends (failure) — not while actively running
+  const canGoBack = step !== "upload" && !(step === "extracting" && isExtracting);
   const canGoNext =
     (step === "select-account" && selectedAccount !== null) ||
     (step === "select-forms"   && selectedForms.length > 0);
