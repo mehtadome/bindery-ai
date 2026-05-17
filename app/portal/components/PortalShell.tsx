@@ -82,6 +82,7 @@ export default function PortalShell() {
       });
 
       if (!res.ok || !res.body) {
+        console.error("[runExtraction] API request failed:", res.status, res.statusText);
         addLog("error", "API request failed — check your API key and try again.");
         setIsExtracting(false);
         return;
@@ -113,7 +114,8 @@ export default function PortalShell() {
       setIsExtracting(false);
       setTimeout(() => setStep("results"), 1200);
 
-    } catch {
+    } catch (err) {
+      console.error("[runExtraction] Network error:", err);
       addLog("error", "Network request failed.");
       setIsExtracting(false);
     }

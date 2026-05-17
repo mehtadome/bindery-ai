@@ -12,8 +12,8 @@ export function parseExtractionResponse(
     // strip markdown code fences if Claude wrapped the JSON despite instructions
     const cleaned = raw.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
     parsed = JSON.parse(cleaned);
-  } catch {
-    // return empty results for all forms if JSON is unparseable
+  } catch (err) {
+    console.error("[extract] JSON parse failed:", err, "\nRaw response:\n", raw);
     return formTypes.map((formType) => emptyResult(formType));
   }
 
