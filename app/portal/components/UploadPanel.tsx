@@ -62,7 +62,15 @@ export default function UploadPanel({ onFileAccepted }: UploadPanelProps) {
       />
 
       <p className="text-xs text-muted">
-        Try <span className="font-mono font-semibold">data/ams_export.csv</span> from the repo
+        Try{" "}
+        <a
+          href="/api/sample-csv"
+          download="ams_export.csv"
+          className="font-mono font-semibold text-red hover:underline"
+        >
+          data/ams_export.csv
+        </a>
+        {" "}from the repo
       </p>
     </div>
   );
