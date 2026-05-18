@@ -8,7 +8,7 @@ import type {
 } from "@/app/types";
 import { ACORD_FORMS } from "@/app/lib/constants";
 import { parseCSV, resolveAccounts } from "@/app/lib/csv-parser";
-import { parseExtractionResponse } from "@/app/lib/extract";
+import { parseNDJSONLine, emptyResult, recalcFillRate } from "@/app/lib/extract";
 import StepIndicator from "./StepIndicator";
 import UploadPanel from "./UploadPanel";
 import AccountPicker from "./AccountPicker";
@@ -40,7 +40,7 @@ export default function PortalShell() {
   const [extractionLog, setExtractionLog] = useState<ExtractionLogEntry[]>([]);
   // true while stream is open; drives ExtractionLog spinner and disables navigation
   const [isExtracting, setIsExtracting] = useState(false);
-  // populated after stream completes; Phase 2 replaces placeholder with real JSON parse
+  // pre-populated with emptyResult() before stream opens; fields appended as SSE events arrive
   const [results, setResults] = useState<FormExtractionResult[]>([]);
 
   const addLog = useCallback((type: ExtractionLogEntry["type"], message: string) => {
@@ -69,7 +69,8 @@ export default function PortalShell() {
     setStep("extracting");
     setIsExtracting(true);
     setExtractionLog([]);
-    setResults([]);
+    // initialize one empty result per form so ResultsPanel has structure before first field arrives
+    setResults(selectedForms.map(emptyResult));
 
     addLog("info", `Starting extraction for ${selectedAccount.insuredName}`);
     addLog("info", `Forms selected: ${selectedForms.join(", ")}`);
@@ -90,29 +91,41 @@ export default function PortalShell() {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let fullText = "";
+      let buffer = "";
 
       addLog("info", "Claude is analyzing your AMS data...");
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        fullText += chunk;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
 
-        // surface form progress as stream arrives
-        if (chunk.includes("ACORD 125")) addLog("success", "Extracting ACORD 125 fields...");
-        if (chunk.includes("ACORD 126")) addLog("success", "Extracting ACORD 126 fields...");
-        if (chunk.includes("ACORD 130")) addLog("success", "Extracting ACORD 130 fields...");
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const parsed = parseNDJSONLine(line.slice(6));
+          if (!parsed) continue;
+
+          const { formType, field } = parsed;
+
+          // log each field as it arrives — [REVIEW] fields surface as warnings
+          if (field.value) {
+            addLog(field.flagged ? "warning" : "success", `${field.fieldName} · ${formType}: ${field.value}`);
+          }
+
+          // Claude emits each field once in order — no overwrite needed, only append
+          setResults((prev) =>
+            prev.map((r) =>
+              r.formType !== formType ? r : recalcFillRate({ ...r, fields: [...r.fields, field] })
+            )
+          );
+        }
       }
 
-      // buffer is complete — parse Claude's JSON response into FormExtractionResult[]
-      const placeholderResults = parseExtractionResponse(fullText, selectedForms);
-
-      addLog("success", `Extraction complete — review your results below`);
-      setResults(placeholderResults);
+      addLog("success", "Extraction complete — review your results below");
       setIsExtracting(false);
-      setTimeout(() => setStep("results"), 1200);
+      setStep("results");
 
     } catch (err) {
       console.error("[runExtraction] Network error:", err);
@@ -140,7 +153,8 @@ export default function PortalShell() {
   const canGoBack = step !== "upload" && !(step === "extracting" && isExtracting);
   const canGoNext =
     (step === "select-account" && selectedAccount !== null) ||
-    (step === "select-forms"   && selectedForms.length > 0);
+    (step === "select-forms"   && selectedForms.length > 0) ||
+    (step === "extracting"     && !isExtracting && results.length > 0);
   const isLastStep = step === "results";
 
   return (

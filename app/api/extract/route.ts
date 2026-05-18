@@ -25,34 +25,55 @@ ${getFieldsForForm(formType).map((f) => `- ${f}`).join("\n")}
 
   const result = streamText({
     model: anthropic("claude-haiku-4-5-20251001"),
+    // one field per line — client parses each SSE event independently, no waiting for full JSON
     system: `You are Bindery AI, an expert insurance data extraction system.
 You receive AMS (Agency Management System) account data and extract values into ACORD form fields.
 
 RULES:
 - Extract only values explicitly present in the source data. Never hallucinate.
-- If a field is not found, set it to null.
+- If a field is not found, use null (not the string "null").
 - If a value is present but ambiguous or needs producer review, prefix it with [REVIEW].
 - Normalize dates to MM/DD/YYYY. Strip currency symbols from numeric fields.
-- Return ONLY valid JSON. No explanation, no markdown, no prose.`,
+- Output ONLY newline-delimited JSON — one object per line, no markdown, no prose.
+
+Each line must be exactly:
+{"form": "<form name>", "field": "<field name>", "value": "<extracted value>"}`,
     prompt: `Extract ACORD form fields from the following AMS account data.
 
 ${formatAccountContext(account)}
 
-Fill the following fields for each requested form. Return a single JSON object where each key is a form name and each value is an object of field name → extracted value (null if missing).
+Output every field listed below, in order, one per line:
 
-${formSections}
-
-Return format:
-{
-  "${formTypes[0]}": {
-    "Field Name": "extracted value or null",
-    ...
-  }
-}`,
-    maxOutputTokens: 2048,
+${formSections}`,
+    maxOutputTokens: 8192, // 108 fields × ~18 tokens each = ~1944; 8192 gives 4× headroom for all 3 forms
   });
 
-  return result.toTextStreamResponse();
+  // split stream chunks on \n, hold incomplete trailing line in buffer until next chunk completes it
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      let buffer = "";
+      for await (const chunk of result.textStream) {
+        buffer += chunk;
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed) controller.enqueue(encoder.encode(`data: ${trimmed}\n\n`));
+        }
+      }
+      if (buffer.trim()) controller.enqueue(encoder.encode(`data: ${buffer.trim()}\n\n`));
+      controller.close();
+    },
+  });
+
+  // SSE response — client reads data: events and upserts fields into state as they arrive
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+    },
+  });
 }
 
 function formatAccountContext(account: AccountData): string {
