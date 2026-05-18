@@ -153,7 +153,8 @@ export default function PortalShell() {
   const canGoBack = step !== "upload" && !(step === "extracting" && isExtracting);
   const canGoNext =
     (step === "select-account" && selectedAccount !== null) ||
-    (step === "select-forms"   && selectedForms.length > 0);
+    (step === "select-forms"   && selectedForms.length > 0) ||
+    (step === "extracting"     && !isExtracting && results.length > 0);
   const isLastStep = step === "results";
 
   return (
