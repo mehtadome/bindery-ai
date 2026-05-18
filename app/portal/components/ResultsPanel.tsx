@@ -64,8 +64,11 @@ function FillRateBadge({ filledFields, totalFields, flaggedFields }: FillRateBad
   );
 }
 
+const FORM_ORDER: AcordFormType[] = ["ACORD 125", "ACORD 126", "ACORD 130"];
+
 export default function ResultsPanel({ results }: ResultsPanelProps) {
-  const firstForm = results[0]?.formType ?? "ACORD 125";
+  const sorted = [...results].sort((a, b) => FORM_ORDER.indexOf(a.formType) - FORM_ORDER.indexOf(b.formType));
+  const firstForm = sorted[0]?.formType ?? "ACORD 125";
   const [activeTab, setActiveTab] = useState<AcordFormType>(firstForm);
 
   const activeResult = results.find((r) => r.formType === activeTab);
@@ -87,7 +90,7 @@ export default function ResultsPanel({ results }: ResultsPanelProps) {
 
       {/* tab bar */}
       <div className="flex gap-2 mb-4 flex-wrap">
-        {results.map((r) => (
+        {sorted.map((r) => (
           <button
             key={r.formType}
             onClick={() => setActiveTab(r.formType)}

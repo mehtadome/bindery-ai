@@ -45,7 +45,7 @@ ${formatAccountContext(account)}
 Output every field listed below, in order, one per line:
 
 ${formSections}`,
-    maxOutputTokens: 2048,
+    maxOutputTokens: 8192, // 108 fields × ~18 tokens each = ~1944; 8192 gives 4× headroom for all 3 forms
   });
 
   // split stream chunks on \n, hold incomplete trailing line in buffer until next chunk completes it
