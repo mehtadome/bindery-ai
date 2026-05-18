@@ -8,7 +8,7 @@ const LINE = 8;
 
 export function generatePdf(result: FormExtractionResult): void {
   const doc = new jsPDF();
-  const { formType, fields, fillRate, totalFields, filledFields, flaggedFields } = result;
+  const { formType, fields } = result;
   let y = 20;
 
   // header — form name + generation timestamp
@@ -25,42 +25,37 @@ export function generatePdf(result: FormExtractionResult): void {
   doc.setDrawColor(200);
   doc.line(14, y, 196, y); y += LINE;
 
-  // one row per field — color-coded by status
+  // one row per field — color-coded by status, long values wrap to fit right margin
+  const VALUE_X = 90;
+  const MAX_WIDTH = 196 - VALUE_X;  // right margin at 196, value column starts at 90
   doc.setFontSize(10);
+
   fields.forEach((field) => {
-    // overflow onto a new page if near the bottom
-    if (y > 270) { doc.addPage(); y = 20; }
+    const displayValue = field.flagged ? `[FLAGGED] ${field.value}` : field.value || "MISSING";
+    // wrap text to max width so nothing overflows the right margin
+    const wrapped = doc.splitTextToSize(displayValue, MAX_WIDTH);
+    const rowHeight = wrapped.length * LINE;
+
+    // overflow onto a new page if this row won't fit
+    if (y + rowHeight > 270) { doc.addPage(); y = 20; }
 
     doc.setFont("helvetica", "bold");
     doc.setTextColor(0);
     doc.text(field.fieldName, 14, y);
 
     doc.setFont("helvetica", "normal");
-    if (field.flagged) {
-      doc.setTextColor(180, 100, 0);           // amber — needs review
-      doc.text(`[FLAGGED] ${field.value}`, 90, y);
-    } else if (!field.value) {
-      doc.setTextColor(180, 0, 0);             // red — missing
-      doc.text("MISSING", 90, y);
-    } else {
-      doc.setTextColor(0);                     // black — filled
-      doc.text(field.value, 90, y);
-    }
+    if (field.flagged)   doc.setTextColor(180, 100, 0);  // amber — needs review
+    else if (!field.value) doc.setTextColor(180, 0, 0);  // red — missing
+    else                 doc.setTextColor(0);             // black — filled
 
-    y += LINE;
+    doc.text(wrapped, VALUE_X, y);
+    y += rowHeight;
   });
 
-  // fill-rate footer
+  // closing divider
   y += 4;
   doc.setDrawColor(200);
-  doc.line(14, y, 196, y); y += LINE;
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(80);
-  doc.text(
-    `Fill Rate: ${filledFields}/${totalFields} fields (${fillRate}%)  ·  ${flaggedFields} flagged for review`,
-    14, y
-  );
+  doc.line(14, y, 196, y);
 
   doc.save(`${formType.replace(" ", "_")}_bindery.pdf`);
 }

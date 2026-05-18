@@ -45,8 +45,9 @@ export function parseCSV(csvText: string): AccountData[] {
       rawData,
     };
 
-    // skip rows where no insured name is found — blank rows, malformed lines
-    if (account.insuredName) accounts.push(account);
+    // rows with no insured name get status: pending for async Haiku resolution instead of being dropped
+    if (!account.insuredName) account.status = "pending";
+    accounts.push(account);
   }
 
   return accounts;
@@ -96,6 +97,44 @@ function findFieldValue(data: Record<string, string>, possibleNames: string[]): 
     if (key && data[key]) return cleanValue(data[key]);
   }
   return "";
+}
+
+// fires parallel Haiku calls for all pending accounts, backfills fields in place, calls onUpdate after each resolution
+export async function resolveAccounts(
+  accounts: AccountData[],
+  onUpdate: () => void
+): Promise<void> {
+  const pending = accounts.filter((a) => a.status === "pending");
+  await Promise.all(
+    pending.map(async (account) => {
+      try {
+        const res = await fetch("/api/resolve-account", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rawData: account.rawData }),
+        });
+        if (!res.ok) throw new Error("resolve failed");
+        const data = await res.json() as {
+          insuredName: string | null;
+          city: string | null;
+          state: string | null;
+          businessType: string | null;
+          zipCode: string | null;
+        };
+        // backfill resolved fields directly into the existing AccountData object
+        if (data.insuredName)  account.insuredName  = data.insuredName;
+        if (data.city)         account.city         = data.city;
+        if (data.state)        account.state        = data.state;
+        if (data.businessType) account.businessType = data.businessType;
+        if (data.zipCode)      account.zipCode      = data.zipCode;
+        account.status = "resolved";
+      } catch {
+        account.status = "failed";
+      }
+      // trigger re-render after each account resolves, not just when all finish
+      onUpdate();
+    })
+  );
 }
 
 export function formatCurrency(value: string): string {
