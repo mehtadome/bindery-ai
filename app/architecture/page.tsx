@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import ArchTopBar from "./components/ArchTopBar";
 import TierCard from "./components/TierCard";
 import T0Diagram from "./components/T0Diagram";
+import T1Diagram from "./components/T1Diagram";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 16 },
@@ -16,12 +17,12 @@ const fadeUp = {
 
 const T0_DECISIONS = [
   {
-    label: "Pattern A streaming",
-    detail: "Full response buffered before JSON.parse — live log updates via keyword inspection of chunks as they arrive. Swap to Pattern C (server-sent events) for true field-by-field streaming.",
+    label: "LLM streaming",
+    detail: "Claude outputs NDJSON — one {form, field, value} per line. Server emits each complete line as an SSE event. Client parses events and logs + populates results live as each field arrives.",
   },
   {
     label: "Extraction / mapping split",
-    detail: "Claude outputs a canonical Account Schema JSON — one call, form-agnostic. ACORD field lists are the mapping layer. Adding a new form = new field list only, no prompt changes.",
+    detail: "Claude outputs one field per line, form-agnostic. ACORD field lists are the mapping layer — adding a new form = new field list only, no prompt changes.",
   },
   {
     label: "Haiku fallback",
@@ -29,13 +30,20 @@ const T0_DECISIONS = [
   },
 ];
 
-const T1_PLACEHOLDER = (
-  <div className="flex flex-col items-center justify-center gap-3 py-20">
-    <div className="text-3xl text-border">⬡</div>
-    <p className="text-sm font-semibold text-muted">Diagram coming soon</p>
-    <p className="text-xs text-muted/70">T1 production architecture</p>
-  </div>
-);
+const T1_DECISIONS = [
+  {
+    label: "Generic ingestion",
+    detail: "Data source abstracted to AMS / SFTP / S3 — Bindery adapts to whatever the client already uses. No new tooling required on their end.",
+  },
+  {
+    label: "Broadcast output",
+    detail: "Both outputs always fire — no routing logic, no client choice. Every extraction lands in the client's data store AND submits to the ACORD platform.",
+  },
+  {
+    label: "Data retention guarantee",
+    detail: "Write-back to the client's own environment satisfying SOC 2, NAIC, and state insurance data retention requirements. Client has a record before the carrier does.",
+  },
+];
 
 export default function ArchitecturePage() {
   return (
@@ -64,7 +72,7 @@ export default function ArchitecturePage() {
           badgeClass="bg-red/10 text-red"
           borderClass="border-red/20"
           title="Current — Web Portal"
-          subtitle="CSV in → Claude Haiku extraction → ACORD field grid → PDF export."
+          subtitle="CSV in → Claude Haiku NDJSON stream → fields logged live via SSE → ACORD results → PDF export."
           diagram={<T0Diagram />}
           decisions={T0_DECISIONS}
           motionCustom={1}
@@ -77,8 +85,8 @@ export default function ArchitecturePage() {
           borderClass="border-brown/20"
           title="Production Pipeline"
           subtitle="Fivetran → Snowflake → dbt → extraction → carrier portal push + AMS write-back."
-          diagram={T1_PLACEHOLDER}
-          decisions={[]}
+          diagram={<T1Diagram />}
+          decisions={T1_DECISIONS}
           motionCustom={2}
         />
 

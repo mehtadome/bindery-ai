@@ -69,7 +69,7 @@ export default function T0Diagram() {
       <path d="M 641,84 L 641,108 L 370,108 L 370,84"
         stroke={arrow} strokeWidth="1.5" fill="none" markerEnd="url(#arr)" />
       <rect x="440" y="112" width="130" height="16" rx="4" fill="white" stroke={stroke} strokeWidth="1" />
-      <text x="505" y="124" textAnchor="middle" fontSize="9.5" fill={label}>JSON stream · buffered</text>
+      <text x="505" y="124" textAnchor="middle" fontSize="9.5" fill={label}>NDJSON · SSE events</text>
 
       {/* 4 · Next.js → Browser (field results, return) */}
       <line x1="286" y1="62" x2="148" y2="62" stroke={arrow} strokeWidth="1.5" markerEnd="url(#arr)" />
@@ -86,7 +86,7 @@ export default function T0Diagram() {
       <path d="M 420,84 L 420,196 L 516,196 L 516,212"
         stroke={arrow} strokeWidth="1.5" fill="none" markerEnd="url(#arr)" />
       <rect x="424" y="176" width="162" height="16" rx="4" fill="white" stroke={stroke} strokeWidth="1" />
-      <text x="505" y="188" textAnchor="middle" fontSize="9.5" fill={label}>parseExtractionResponse</text>
+      <text x="505" y="188" textAnchor="middle" fontSize="9.5" fill={label}>parseNDJSONLine · upsert</text>
     </svg>
   );
 }

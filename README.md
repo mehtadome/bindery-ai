@@ -1,71 +1,63 @@
 # Bindery AI
 
-AI-powered pipeline that ingests messy brokerage AMS exports and PDF documents to produce filled ACORD insurance forms.
+AI-powered pipeline that ingests commercial insurance AMS CSV exports and produces filled ACORD forms — live, field-by-field, via Claude Haiku.
 
 ## What it does
 
-Commercial insurance CSRs spend hours re-keying account data from AMS systems into carrier applications and ACORD forms. Bindery AI automates that extraction: feed it an AMS CSV export and/or a declaration page PDF, and get back a filled ACORD form.
+Commercial insurance CSRs spend hours re-keying account data from AMS systems into carrier applications and ACORD forms. Bindery AI automates that extraction: upload an AMS CSV export, pick an account, and watch Claude fill out ACORD 125, 126, and 130 fields in real time.
 
 ## How it works
 
 ```
-Inputs (AMS CSV, PDF dec pages)
-  → Ingestion       pdfplumber + pandas
-  → Extraction      Claude API → canonical Account Schema JSON
-  → Mapping         YAML config per form type
-  → Form Fill       pypdf
-  → Filled PDF + fill-rate report
+AMS CSV upload
+  → parseCSV          normalize headers (fuzzy match), extract AccountData
+  → resolveAccounts   async Haiku fallback for rows with blank insuredName
+  → /api/extract      Claude Haiku streams NDJSON — one {form, field, value} per line
+  → SSE events        server emits each complete line as data: event
+  → live log + grid   client parses events, logs each field, populates results panel
+  → PDF export        jsPDF client-side download per form
 ```
-
-The extraction layer is the only place AI logic lives. It produces a canonical Account Schema JSON regardless of input format. The mapping layer is pure config — adding a new form type means writing a new YAML file, not touching extraction code.
 
 ## Supported Forms
 
-- ACORD 125 — Commercial Insurance Application
-- ACORD 126 — Commercial General Liability Section
-- ACORD 130 — Workers Compensation Application
+- ACORD 125 — Commercial Insurance Application (38 fields)
+- ACORD 126 — Commercial General Liability Section (41 fields)
+- ACORD 130 — Workers Compensation Application (32 fields)
 
 ## Setup
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install pdfplumber pandas anthropic pypdf PyYAML
-export ANTHROPIC_API_KEY=your_key_here
+npm install
+cp .env.local.example .env.local   # add ANTHROPIC_API_KEY
+npm run dev
 ```
 
-## Usage
-
-```bash
-python fill_form.py \
-  --inputs data/ams_export.csv dec_page.pdf \
-  --form acord125 \
-  --output filled_acord125.pdf
-```
+Open [http://localhost:3000/portal](http://localhost:3000/portal). Use the sample CSV download link on the upload step to grab `data/ams_export.csv`.
 
 ## Sample Data
 
-`data/ams_export.csv` — 4 synthetic commercial accounts (plumbing contractor, restaurant, auto parts retail, IT consulting) with realistic AMS360-style export data covering all fields needed for ACORD 125, 126, and 130.
+`data/ams_export.csv` — 5 synthetic commercial accounts:
+- **ACC-001** Acme Plumbing LLC — plumbing contractor, Houston TX (best for ACORD 126 CGL)
+- **ACC-002** Mesa Verde Restaurant Inc — full-service restaurant, Denver CO
+- **ACC-003** Sunrise Auto Parts Corp — retail auto parts, Miami FL
+- **ACC-004** BluePath Technologies LLC — software/IT consulting, San Francisco CA
+- **ACC-005** Harbor Point Logistics *(blank insuredName)* — triggers async Haiku resolution fallback
+
+## Architecture
+
+Visit [/architecture](http://localhost:3000/architecture) for T0 (MVP) and T1 (production) pipeline diagrams.
+
+**T0 — current**: CSV upload → Claude Haiku NDJSON stream → SSE events → live field log → ACORD results → PDF export
+
+**T1 — production**: Client Data Store (AMS/SFTP/S3) → extraction → broadcast to Client Data Store (write-back, data retention) + ACORD Platform (XML submission)
 
 ## Tech Stack
 
 | Layer | Library |
 |-------|---------|
-| PDF extraction | pdfplumber |
-| CSV parsing | pandas |
-| AI extraction | Anthropic Claude API |
-| Form fill | pypdf |
-| Mapping config | PyYAML |
-| CLI | argparse |
-
-## Web UI
-
-A Next.js front-end lives at the repo root alongside the Python pipeline.
-
-```bash
-npm install
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) to use the UI. The page auto-updates as you edit `app/page.tsx`.
-
-To deploy, use the [Vercel Platform](https://vercel.com/new) — see [Next.js deployment docs](https://nextjs.org/docs/app/building-your-application/deploying) for details.
+| Framework | Next.js 16, App Router |
+| AI | Vercel AI SDK v6, Claude Haiku (`claude-haiku-4-5-20251001`) |
+| Streaming | NDJSON + Server-Sent Events |
+| Styling | Tailwind v4, Framer Motion |
+| PDF export | jsPDF (client-side) |
+| Icons | lucide-react |
