@@ -1,6 +1,6 @@
 # Bindery AI
 
-**Live demo: [bindery-ai.vercel.app](https://bindery-ai.vercel.app/)**
+**Live demo: [bindery-ai.vercel.app](https://bindery-ai.vercel.app/)** | **[Project write-up](https://docs.google.com/document/d/1GGsbSoIyB6GFT_hSWY4hSRK6aiIteOjOO2sQb1sHQpw/edit?usp=sharing)**
 
 AI-powered pipeline that ingests commercial insurance AMS CSV exports and produces filled ACORD forms — live, field-by-field, via Claude Haiku.
 
