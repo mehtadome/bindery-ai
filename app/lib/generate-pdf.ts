@@ -31,6 +31,7 @@ export function generatePdf(result: FormExtractionResult): void {
   doc.setFontSize(10);
 
   fields.forEach((field) => {
+    // flagged → prepend [FLAGGED]; not flagged + value → use as-is; not flagged + empty → "MISSING"
     const displayValue = field.flagged ? `[FLAGGED] ${field.value}` : field.value || "MISSING";
     // wrap text to max width so nothing overflows the right margin
     const wrapped = doc.splitTextToSize(displayValue, MAX_WIDTH);

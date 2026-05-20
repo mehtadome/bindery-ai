@@ -63,7 +63,7 @@ export default function UploadPanel({ onFileAccepted }: UploadPanelProps) {
         className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
       />
-      {/* sample CSV download link */}
+      {/* triggers GET /api/sample-csv — browser auto-saves to device via download attribute, user still uploads manually */}
       <p className="text-xs text-muted">
         Try{" "}
         <a
