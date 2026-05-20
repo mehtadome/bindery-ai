@@ -13,11 +13,13 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // drop blank fields, format each as "Header: value" lines for Claude to read
   const fields = Object.entries(rawData)
     .filter(([, v]) => v?.trim())
     .map(([k, v]) => `${k}: ${v}`)
     .join("\n");
 
+  // STEP 2b: build the prompt for the fallback Haiku call
   const { text } = await generateText({
     model: anthropic("claude-haiku-4-5-20251001"),
     system: `You are an insurance data assistant. Given raw AMS export fields, identify the insured business name and basic identity fields. Return ONLY valid JSON, no prose.`,
@@ -36,6 +38,7 @@ ${fields}`,
   });
 
   try {
+    // Claude sometimes wraps JSON in ```json ... ``` — strip fences before parsing
     const cleaned = text.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
     return new Response(cleaned, { headers: { "Content-Type": "application/json" } });
   } catch {
