@@ -8,8 +8,10 @@ interface UploadPanelProps {
 
 export default function UploadPanel({ onFileAccepted }: UploadPanelProps) {
   const [dragging, setDragging] = useState(false);
+  // ref to the hidden file input so the styled button can trigger .click() on it
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // STEP 1:validates .csv extension, then fires onFileAccepted prop
   function handleFile(file: File) {
     if (!file.name.endsWith(".csv")) return;
     onFileAccepted(file);
@@ -31,6 +33,7 @@ export default function UploadPanel({ onFileAccepted }: UploadPanelProps) {
         </p>
       </div>
 
+      {/* drag-drop CSV zone + sample CSV download link */}
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
@@ -60,7 +63,7 @@ export default function UploadPanel({ onFileAccepted }: UploadPanelProps) {
         className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
       />
-
+      {/* triggers GET /api/sample-csv — browser auto-saves to device via download attribute, user still uploads manually */}
       <p className="text-xs text-muted">
         Try{" "}
         <a

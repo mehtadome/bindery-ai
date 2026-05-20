@@ -41,6 +41,7 @@ function LogEntryRow({ entry }: LogEntryRowProps) {
 }
 
 export default function ExtractionLog({ entries, isExtracting }: ExtractionLogProps) {
+  // ref to the bottom sentinel div so useEffect can scroll it into view on each new entry
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // auto-scroll to bottom as new entries arrive

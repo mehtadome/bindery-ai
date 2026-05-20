@@ -69,7 +69,7 @@ export default function PortalShell() {
     setStep("extracting");
     setIsExtracting(true);
     setExtractionLog([]);
-    // initialize one empty result per form so ResultsPanel has structure before first field arrives
+    // initialize one empty result per form so ResultsPanel can render immediately without waiting
     setResults(selectedForms.map(emptyResult));
 
     addLog("info", `Starting extraction for ${selectedAccount.insuredName}`);
@@ -105,7 +105,10 @@ export default function PortalShell() {
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           const parsed = parseNDJSONLine(line.slice(6));
-          if (!parsed) continue;
+          if (!parsed) {
+            addLog("warning", `Skipped malformed line from Claude: ${line.slice(6)}`);
+            continue;
+          }
 
           const { formType, field } = parsed;
 
@@ -211,13 +214,13 @@ export default function PortalShell() {
               />
             </motion.div>
           )}
-
+          {/* STEP 4: Form selection */}
           {step === "select-forms" && (
             <motion.div key="select-forms" {...slide}>
               <FormSelector selectedForms={selectedForms} onToggle={handleFormToggle} />
             </motion.div>
           )}
-
+          {/* STEP 5: Extraction log */}
           {step === "extracting" && (
             <motion.div key="extracting" {...slide}>
               <ExtractionLog entries={extractionLog} isExtracting={isExtracting} />
@@ -249,6 +252,7 @@ export default function PortalShell() {
           </div>
           <div>
             {canGoNext && (
+              // advances to next WorkflowStep in STEP_ORDER; select-forms is special-cased to trigger extraction
               <button
                 onClick={step === "select-forms" ? runExtraction : () => setStep(STEP_ORDER[STEP_ORDER.indexOf(step) + 1])}
                 className="inline-flex items-center gap-2 bg-red text-white font-semibold px-6 py-2.5 rounded-full text-sm hover:bg-red-dark transition-colors"

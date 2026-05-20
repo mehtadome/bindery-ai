@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // one section per selected form — adding a new form to acord-fields.ts extends the prompt automatically, no changes needed here
+  // field names only, no account data — just tells Claude what to fill; account data is injected separately via formatAccountContext
   const formSections = formTypes.map((formType) => `
 ### ${getFormName(formType)}
 ${getFieldsForForm(formType).map((f) => `- ${f}`).join("\n")}

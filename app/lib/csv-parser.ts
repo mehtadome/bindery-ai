@@ -20,6 +20,7 @@ export function parseCSV(csvText: string): AccountData[] {
       rawData[header] = values[index] || "";
     });
 
+    // STEP 2: each field tries a list of common header aliases via findFieldValue fuzzy match
     const account: AccountData = {
       id: `account-${i}`,
       insuredName: findFieldValue(rawData, ["insured name", "named insured", "insuredname"]),
@@ -108,6 +109,7 @@ export async function resolveAccounts(
   await Promise.all(
     pending.map(async (account) => {
       try {
+        // STEP 2b: hit /api/resolve-account for each pending account
         const res = await fetch("/api/resolve-account", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
